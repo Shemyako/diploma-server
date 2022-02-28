@@ -277,7 +277,7 @@ def get_pre_dogs():
 @app.route("/get/courses")
 def get_courses():
     # Получаем все курсы
-    sql = "SELECT id, name, amount, price FROM courses WHERE is_actual = true"
+    sql = "SELECT id, name, amount, price, is_actual FROM courses "
     cursor = conn.cursor()
     cursor.execute(sql)
     result = cursor.fetchall()
@@ -287,7 +287,7 @@ def get_courses():
     answer = ""
     # Формируем ответ
     for i in result:
-        answer += "~" + str(i[0]) + "|" + str(i[1]) + "|" + str(i[2]) + "|" + str(i[3])
+        answer += "~" + str(i[0]) + "|" + str(i[1]) + "|" + str(i[2]) + "|" + str(i[3]) + "|" + str(i[4])
         
     
     # print(answer)
