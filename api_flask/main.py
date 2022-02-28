@@ -405,6 +405,32 @@ def new_clietn():
     
     return "1~"
 
+# Создание нового клиента
+@app.route("/new/cours")
+def new_cours():
+    '''
+    Создание нового курса
+    От пользователя получаем название, кол-во, цена, актуальность, ?id
+    '''
+
+    if ('name' not in request.args or 'amount' not in request.args or 
+            'price' not in request.args or 'actual' not in request.args):
+        return '0~Введены не все поля'
+    
+    if 'id' in request.args:
+        sql = 'UPDATE courses SET name=%s, amount=%s, price=%s, is_actual=%s WHERE id=%s'
+        to_sql = (request.args.get('name'), request.args.get('amount'), request.args.get('price'), request.args.get('actual'), request.args.get('id') )
+    else:
+        sql = "INSERT INTO courses (name, amount, price, is_actual) VALUES (%s, %s, %s, %s)"
+        to_sql = (request.args.get('name'), request.args.get('amount'), request.args.get('price'), request.args.get('is_actual'))
+    
+    cursor = conn.cursor()
+    cursor.execute(sql, to_sql)
+    conn.commit()
+    cursor.close()
+    
+    return "1~"
+
 # Редактирование клиента
 @app.route("/edit/client")
 def edit_client():
