@@ -138,7 +138,7 @@ def login():
         return '0~'
 
 # Поиск клиента
-@app.route("/find/client")
+@app.route("/get/client")
 def get_client():
     if "phone" not in request.args:
         return "0~Введены не все поля"
@@ -158,7 +158,7 @@ def get_client():
     return '1' + answer
 
 # Поиск собак клиента
-@app.route("/find/client/dog")
+@app.route("/get/client/dog")
 def get_clients_dog():
     if "id" not in request.args:
         return "0~Введены не все поля"
@@ -187,7 +187,7 @@ def get_clients_dog():
     return '1' + answer
 
 # Поиск собак клиента
-@app.route("/find/dog/client")
+@app.route("/get/dog/client")
 def get_dog_clients():
     if "dog_id" not in request.args:
         return "0~Введены не все поля"
@@ -235,7 +235,7 @@ def get_pre_dogs():
     # Получаем информацию о собаке
     dog_info = ""
     if "dog_id" in request.args:
-        sql = "SELECT dogs.id, name, breed, staff_id, place_for_lesson, cours_id FROM dogs JOIN dog_cours ON dog_id = dogs.id WHERE dogs.id = %s ORDER BY date_of_cours DESC"
+        sql = "SELECT dogs.id, name, breed, staff_id, place_for_lesson, cours_id, is_learning FROM dogs JOIN dog_cours ON dog_id = dogs.id WHERE dogs.id = %s ORDER BY date_of_cours DESC"
         cursor.execute(sql, (request.args.get("dog_id"),))
         dog_info = cursor.fetchone()
         # print(dog_info)
@@ -268,7 +268,7 @@ def get_pre_dogs():
 
     if "dog_id" in request.args: 
         answer += "~" + str(cours_index) + "|" + str(place_index) + "|" + str(staff_index)
-        answer += "|" + str(dog_info[1]) + "|" + str(dog_info[2])
+        answer += "|" + str(dog_info[1]) + "|" + str(dog_info[2]) + "|" + str(dog_info[6])
     # print(staff_index, cours_index, place_index)
     
     return answer
@@ -304,7 +304,8 @@ def new_dog():
 
     if ('name' not in request.args or 'usr_id' not in request.args or 
             'breed' not in request.args or 'staff_id' not in request.args or 
-            'place' not in request.args or 'cours' not in request.args):
+            'place' not in request.args or 'cours' not in request.args or
+            'actual' not in request.args):
         return '0~Введены не все поля'
     staff_id = request.args.get("staff_id")
     if staff_id == "None":
@@ -312,15 +313,15 @@ def new_dog():
 
     cursor = conn.cursor()
     if "dog_id" in request.args:
-        sql = "UPDATE dogs SET name = %s, breed = %s, staff_id = %s, place_for_lesson = %s WHERE id = %s"
+        sql = "UPDATE dogs SET name = %s, breed = %s, staff_id = %s, place_for_lesson = %s, is_learning = %s WHERE id = %s"
         cursor.execute(sql, (request.args.get("name"), request.args.get("breed"), 
-            staff_id, request.args.get("place"), request.args.get("dog_id")))
+            staff_id, request.args.get("place"), request.args.get("actual"), request.args.get("dog_id")))
         sql = "UPDATE dog_cours SET cours_id = %s WHERE id = (SELECT id from dog_cours WHERE dog_id = %s ORDER BY id DESC LIMIT 1)"
         cursor.execute(sql, (request.args.get("cours"), request.args.get("dog_id")))
     else:
-        sql = 'INSERT INTO dogs (name, breed, is_all, staff_id, place_for_lesson) VALUES (%s, %s, false, %s, %s) RETURNING id'
+        sql = 'INSERT INTO dogs (name, breed, is_learning, staff_id, place_for_lesson) VALUES (%s, %s, %s, %s, %s) RETURNING id'
         cursor.execute(sql, (request.args.get("name"), request.args.get("breed"),
-            staff_id, request.args.get("place")))
+            request.args.get('actual'), staff_id, request.args.get("place")))
         dog_id = cursor.fetchone()
         print(dog_id)
         sql = "INSERT INTO users_dog (user_id, dog_id) VALUES (%s, %s)"
