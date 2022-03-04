@@ -3,11 +3,12 @@ import hashlib
 import uuid
 import psycopg2
 import time
-from datetime import date
+from datetime import date, datetime, timedelta
 
 '''
 TO DO
 
+Сделать отобажение расписания на конкретный день
 На вкладке с курсами скрыть неактуальные combobox
 Создать изменить курс, площадку
 Запретить вводить &?
@@ -137,6 +138,111 @@ def login():
     else:
         return '0~'
 
+# Получение информации до записи на занятие
+@app.route("/get/pre_lesson")
+def pre_lesson():
+    '''
+    Отправить нужно 
+    кинологов, 
+    собак, 
+    типы занятий, 
+    площадки
+    '''
+    answer = ""
+    # Получение кинологов
+    sql = "SELECT id, name FROM staff WHERE role = 1"
+    cursor = conn.cursor()
+    cursor.execute(sql)
+    handlers = cursor.fetchall()
+    
+    # Получение собак
+    sql = ("SELECT distinct dogs.id, dogs.name, breed, staff_id, places.id, places.name, phone FROM dogs JOIN places ON places.id = place_for_lesson " +
+    "JOIN users_dog on dog_id = dogs.id " +
+    "JOIN staff on user_id = staff.id " +  
+    "WHERE is_learning = true")
+    cursor.execute(sql)
+    dogs = cursor.fetchall()
+
+    # Получение типов занятий
+    sql = "SELECT id, name FROM types_of_lessons WHERE is_visible = true"
+    cursor.execute(sql)
+    types_of_lessons = cursor.fetchall()
+
+    # Получение площадок
+    sql = "SELECT id, name FROM places WHERE is_actual = true"
+    cursor.execute(sql)
+    places = cursor.fetchall()
+
+    cursor.close()
+
+    answer += "~"
+    for i in handlers:
+        answer += str(i[0]) + "|" + str(i[1]) + "|"
+
+    # print(result)
+    answer += "~"
+    for i in dogs:
+        answer += str(i[0]) + "|" + str(i[1]) + "|" + str(i[2]) + "|" + str(i[3]) + "|"+ str(i[4]) + " " + str(i[5]) + "|" + i[6] + "|" 
+
+    answer += "~"
+    for i in types_of_lessons:
+        answer += str(i[0]) + "|" + str(i[1]) + "|"
+
+    answer += "~"
+    for i in places:
+        answer += str(i[0]) + "|" + str(i[1]) + "|"
+        
+    
+    # print(answer)
+    return '1' + answer
+
+# Получение расписание кинолога
+@app.route("/get/schedule")
+def get_schedule():
+    '''
+    Возвращаю:
+    id
+    date
+    dog_id, name
+    type_id, name
+    place_id, name
+    onwer's phone
+    '''
+    if "id" not in request.args or "date" not in request.args:
+        return "0~Введены не все поля"
+    answer = ""
+    # Получение кинологов
+    sql = ("SELECT DISTINCT lesson.id, to_char(date, 'HH24:MI'), dogs.id, dogs.name, type_of_lesson, types_of_lessons.name, places.id, places.name, customer.phone FROM lesson " + 
+    "JOIN types_of_lessons ON type_of_lesson = types_of_lessons.id " +
+    "JOIN staff ON staff_id = staff.id " +
+    "JOIN dogs ON dogs.id = dog_id " +
+    "JOIN users_dog ON users_dog.dog_id = dogs.id " +
+    "JOIN staff as customer ON customer.id = users_dog.user_id " +
+    "JOIN places ON place_id = places.id " +
+    " WHERE lesson.staff_id = %s and to_char(date, 'DD.MM.YYYY') = %s")
+    cursor = conn.cursor()
+    cursor.execute(sql, (request.args.get('id'), request.args.get('date')))
+    schedule = cursor.fetchall()
+    
+    print(schedule)
+    print(request.args.get('date'))
+    # Проверим, есть ли расписание на день. Если нет, то предложим недельной давности
+    date1 = datetime.strptime(request.args.get('date'), '%d.%m.%Y')
+    if ( len(schedule) == 0 ) and date1 > datetime.today():
+        date1 = (date1 - timedelta(7)).strftime("%d.%m.%Y")
+        print('date',date1)
+        cursor.execute(sql, (request.args.get('id'), date1))
+        schedule = cursor.fetchall()
+        print('schedule', schedule)
+
+    cursor.close()
+    
+    
+    for i in schedule:
+        answer += "~" + str(i[0]) + "|" + i[1] + "|" + str(i[2]) + " " + i[3] + "|" + str(i[4]) + " " + i[5] + "|" + str(i[6]) + " " + i[7] + "|" + i[8]
+    # print(answer)
+    return '1' + answer
+
 # Поиск клиента
 @app.route("/get/client")
 def get_client():
@@ -217,7 +323,7 @@ def get_pre_dogs():
     else:
         answer = "1~"
     # Получаем курсы
-    sql = "SELECT id, name, amount, price FROM courses"
+    sql = "SELECT id, name, amount, price FROM courses WHERE is_actual = True"
     cursor = conn.cursor()
     cursor.execute(sql)
     courses = cursor.fetchall()
