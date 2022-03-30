@@ -8,7 +8,9 @@ from datetime import date, datetime, timedelta
 '''
 TO DO
 
-Создать изменить курс, площадку
+Сделать менню
+Сервер: Сделать дамб в отдельном потоке
+Сервер: Сделать лог
 Запретить вводить &?
 Добавить гифку на время ожидания на клиент
 Отдельный декоратор для админа
@@ -389,7 +391,7 @@ def get_pre_dogs():
     
     return answer
 
-# Поиск клиента
+# Поиск курсов
 @app.route("/get/courses")
 def get_courses():
     # Получаем все курсы
@@ -409,6 +411,25 @@ def get_courses():
     # print(answer)
     return '1' + answer
 
+# Поиск площадок
+@app.route("/get/places")
+def get_places():
+    # Получаем все курсы
+    sql = "SELECT id, address, name, is_actual FROM places "
+    cursor = conn.cursor()
+    cursor.execute(sql)
+    result = cursor.fetchall()
+    cursor.close()
+
+    # print(result)
+    answer = ""
+    # Формируем ответ
+    for i in result:
+        answer += "~" + str(i[0]) + "|" + i[1] + "|" + i[2] + "|" + str(i[3])
+        
+    
+    # print(answer)
+    return '1' + answer
 
 # Создание новой собаки
 @app.route("/new/dog")
@@ -474,7 +495,7 @@ def add_dog_client():
     
     return answer
 
-# Добавление собаки клиента
+# Добавление собаки курса
 @app.route("/add/dog/cours")
 def add_dog_cours():
     # Проверка на все аргументы
@@ -522,7 +543,7 @@ def new_clietn():
     
     return "1~"
 
-# Создание нового клиента
+# Создание нового курса
 @app.route("/new/cours")
 def new_cours():
     '''
@@ -540,6 +561,32 @@ def new_cours():
     else:
         sql = "INSERT INTO courses (name, amount, price, is_actual) VALUES (%s, %s, %s, %s)"
         to_sql = (request.args.get('name'), request.args.get('amount'), request.args.get('price'), request.args.get('is_actual'))
+    
+    cursor = conn.cursor()
+    cursor.execute(sql, to_sql)
+    conn.commit()
+    cursor.close()
+    
+    return "1~"
+
+# Создание новой площадки
+@app.route("/new/place")
+def new_place():
+    '''
+    Создание новой площадки
+    От пользователя получаем адрес, название, актуальность, ?id
+    '''
+
+    if ('name' not in request.args or 
+            'address' not in request.args or 'actual' not in request.args):
+        return '0~Введены не все поля'
+    
+    if 'id' in request.args:
+        sql = 'UPDATE places SET name=%s, address=%s,  is_actual=%s WHERE id=%s'
+        to_sql = (request.args.get('name'), request.args.get('address'), request.args.get('actual'), request.args.get('id') )
+    else:
+        sql = "INSERT INTO places (name, address, is_actual) VALUES (%s, %s, %s, %s)"
+        to_sql = (request.args.get('name'), request.args.get('address'), request.args.get('is_actual'))
     
     cursor = conn.cursor()
     cursor.execute(sql, to_sql)
