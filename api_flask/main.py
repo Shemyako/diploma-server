@@ -8,8 +8,6 @@ from datetime import date, datetime, timedelta
 '''
 TO DO
 
-Сделать отобажение расписания на конкретный день
-На вкладке с курсами скрыть неактуальные combobox
 Создать изменить курс, площадку
 Запретить вводить &?
 Добавить гифку на время ожидания на клиент
@@ -156,10 +154,22 @@ def pre_lesson():
     handlers = cursor.fetchall()
     
     # Получение собак
-    sql = ("SELECT distinct dogs.id, dogs.name, breed, staff_id, places.id, places.name, phone FROM dogs JOIN places ON places.id = place_for_lesson " +
-    "JOIN users_dog on dog_id = dogs.id " +
-    "JOIN staff on user_id = staff.id " +  
-    "WHERE is_learning = true")
+    # sql = ("SELECT distinct dogs.id, dogs.name, breed, staff_id, places.id, places.name, phone FROM dogs JOIN places ON places.id = place_for_lesson " +
+    # "JOIN users_dog on dog_id = dogs.id " +
+    # "JOIN staff on user_id = staff.id " +  
+    # "WHERE is_learning = true")
+
+    sql = '''SELECT distinct on (dogs.id) dogs.id, dogs.name, breed, dogs.staff_id, places.id, places.name, phone, count(lesson.id), amount, dog_cours.id
+        FROM dogs 
+        JOIN places ON places.id = place_for_lesson 
+        JOIN users_dog on dog_id = dogs.id 
+        JOIN staff on user_id = staff.id 
+        JOIN dog_cours on dog_cours.dog_id = dogs.id
+        JOIN courses on courses.id = cours_id
+        left JOIN lesson on lesson.dog_id = dogs.id and date >= date_of_cours
+        WHERE is_learning = true
+        group by dogs.id, dogs.name, places.id, breed, places.id, phone, user_id, amount, dog_cours.id
+        ORDER BY dogs.id, dog_cours.id DESC'''
     cursor.execute(sql)
     dogs = cursor.fetchall()
 
@@ -177,20 +187,20 @@ def pre_lesson():
 
     answer += "~"
     for i in handlers:
-        answer += str(i[0]) + "|" + str(i[1]) + "|"
+        answer += str(i[0]) + "|" + i[1] + "|"
 
     # print(result)
     answer += "~"
     for i in dogs:
-        answer += str(i[0]) + "|" + str(i[1]) + "|" + str(i[2]) + "|" + str(i[3]) + "|"+ str(i[4]) + " " + str(i[5]) + "|" + i[6] + "|" 
+        answer += str(i[0]) + "|" + i[1] + "|" + i[2] + "|" + str(i[3]) + "|"+ str(i[4]) + " " + i[5] + "|" + i[6] + "|" + str(i[7]) + "|" + str(i[8]) + "|"
 
     answer += "~"
     for i in types_of_lessons:
-        answer += str(i[0]) + "|" + str(i[1]) + "|"
+        answer += str(i[0]) + "|" + i[1] + "|"
 
     answer += "~"
     for i in places:
-        answer += str(i[0]) + "|" + str(i[1]) + "|"
+        answer += str(i[0]) + "|" + i[1] + "|"
         
     
     # print(answer)
@@ -560,6 +570,33 @@ def edit_client():
         
     cursor = conn.cursor()
     cursor.execute(sql, (request.args.get("name"), request.args.get("role"), request.args.get("phone"), birth, tg_id, request.args.get("email"), request.args.get("id") ))
+    conn.commit()
+    cursor.close()
+    
+    return "1~"
+
+# Редактирование расписания
+@app.route("/edit/schedule")
+def edit_schedule():
+    if ('args' not in request.args):
+        return '0~Введены не все поля'
+    # Список со значенияим
+    to_edit = request.args.get("args").split("|")
+    to_edit.pop(-1)
+
+    
+    if len(to_edit) != 1:
+        sql = "INSERT INTO lesson (date, dog_id, place_id, type_of_lesson, staff_id) VALUES (to_timestamp(%s, 'HH24:MI DD.MM.YYYY'), %s, %s, %s, %s)"
+        for i in range(int((len(to_edit))/5 - 1)):
+            sql += ",(to_timestamp(%s, 'HH24:MI DD.MM.YYYY'), %s, %s, %s, %s)"
+    sql_pre = "DELETE FROM lesson WHERE to_char(date, 'DD.MM.YYYY') = %s and staff_id = %s"
+    
+    print(tuple(to_edit))
+    print(sql)
+
+    cursor = conn.cursor()
+    cursor.execute(sql_pre, (to_edit[0].split()[1], to_edit[4]) )
+    cursor.execute(sql, tuple(to_edit))
     conn.commit()
     cursor.close()
     
