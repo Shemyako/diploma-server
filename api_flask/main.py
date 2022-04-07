@@ -8,6 +8,7 @@ from datetime import date, datetime, timedelta
 '''
 TO DO
 
+Во всех функциях проверить case 3
 Сделать менню
 Сервер: Сделать дамб в отдельном потоке
 Сервер: Сделать лог
@@ -254,6 +255,54 @@ def get_schedule():
         answer += "~" + str(i[0]) + "|" + i[1] + "|" + str(i[2]) + " " + i[3] + "|" + str(i[4]) + " " + i[5] + "|" + str(i[6]) + " " + i[7] + "|" + i[8]
     # print(answer)
     return '1' + answer
+
+
+# Поиск Кинолога
+@app.route("/get/handlers")
+def get_handlers():
+    sql = "SELECT id, name FROM staff WHERE role=1"
+    cursor = conn.cursor()
+    cursor.execute(sql, (request.args.get("phone"),))
+    handlers = cursor.fetchall()
+    cursor.close()
+
+    # print(result)
+    answer = "~"
+    for i in handlers:
+        answer += str(i[0]) + "|" + i[1] + "|"    
+    
+    # print(answer)
+    return '1' + answer
+
+
+# Вычисление ЗП
+@app.route("/get/salary")
+def get_salary():
+    if "date" not in request.args or "id" not in request.args:
+        return "0~Введены не все поля"
+
+    sql = "SELECT id, date, dog_id, type_of_lesson FROM lesson WHERE staff_id = %s AND to_char(date,'MM.YYYY') = %s"
+    cursor = conn.cursor()
+    cursor.execute(sql, (request.args.get("id"),request.args.get("date")))
+    result = cursor.fetchall()
+    sql = "SELECT sum(for_instructor) FROM types_of_lessons JOIN lesson ON types_of_lessons.id = type_of_lesson WHERE staff_id = %s AND to_char(date,'MM.YYYY') = %s"
+    cursor.execute(sql, (request.args.get("id"),request.args.get("date")))
+    total_salary = cursor.fetchone()
+    # print(total_salary)
+    # print(sql)
+    cursor.close()
+
+    answer = "~"
+    for i in result:
+        answer += str(i[0]) + "|" + str(i[1]) + "|" + str(i[2]) + "|" + str(i[3]) + "|" 
+    
+    if total_salary[0] is None:
+        answer += "~0"
+    else: 
+        answer += "~" + str(total_salary[0])
+    # print(answer)
+    return '1' + answer
+
 
 # Поиск клиента
 @app.route("/get/client")
