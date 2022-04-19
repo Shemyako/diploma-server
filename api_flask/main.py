@@ -8,13 +8,13 @@ from datetime import date, datetime, timedelta
 '''
 TO DO
 
+Проверить ЗП
 Во всех функциях проверить case 3
-Сделать менню
+Сделать меню
 Сервер: Сделать дамб в отдельном потоке
 Сервер: Сделать лог
 Запретить вводить &?
 Добавить гифку на время ожидания на клиент
-Отдельный декоратор для админа
 
 '''
 
@@ -36,6 +36,18 @@ except psycopg2.OperationalError:
 
 
 app = Flask(__name__)
+
+### Словарь для ролей
+users_roles = {}
+cursor = conn.cursor()
+sql = "SELECT token, role FROM sessions JOIN \"user\" ON  \"user\".id = user_id JOIN staff ON staff.id = staff_id where token!='' "
+cursor.execute(sql)
+place_for_roles_before_main = cursor.fetchall()
+for i in place_for_roles_before_main:
+    users_roles[i[0]] = i[1]
+print(users_roles)
+cursor.close()
+
 
 def making_hash(password: str):
     # Тут создаю хэш для нового пароля с солью
@@ -64,8 +76,16 @@ def check_password(login: int, user_password: str):
 def making_token_for_session(login: int, ip: str, mac: str):
     ctime = time.time()
     token = uuid.uuid4().hex
-    sql = "UPDATE sessions SET token = '' WHERE user_id = %s AND token != ''"
     cursor = conn.cursor()
+    # Получаем старый токен, удалим его из словаря
+    sql = "SELECT token FROM sessions WHERE user_id=%s AND token!=''"
+    cursor.execute(sql, (login,))
+    token_before_delete = cursor.fetchone()
+    if token_before_delete is not None:
+        users_roles.pop(token_before_delete[0])
+    
+    # Очистим сессии, создадим новые, вернём токен и роль
+    sql = "UPDATE sessions SET token = '' WHERE user_id = %s AND token != ''"
     cursor.execute(sql,(login,))
     conn.commit()
     sql = "INSERT INTO sessions(user_id, token, time, ip, mac) VALUES(%s,%s,%s,%s,%s)"
@@ -75,6 +95,8 @@ def making_token_for_session(login: int, ip: str, mac: str):
     cursor.execute(sql, (login,))
     role = cursor.fetchone()
     cursor.close()
+    users_roles[str(ctime) + token] = role[0]
+    # print(users_roles)
     return str(ctime) + token, role 
 
 
@@ -95,7 +117,7 @@ def before_request():
     cursor.execute(sql,(request.args.get("login"), request.args.get("token"), request.args.get("mac")))
     user = cursor.fetchone()
     cursor.close()
-    
+    print(users_roles)
     # print(user)
     if user is None :
         # Если сессии нет, то реавторизация
@@ -124,17 +146,17 @@ def login():
     if 'login' in request.args and 'password' in request.args and 'mac' in request.args:
 
         # try для проверки, логин число ли
-        try:
+        # try:
 
-            if check_password(int(request.args.get('login')), request.args.get('password')):
-                # print('ip', request.remote_addr)
-                token, role = making_token_for_session(int(request.args.get('login')), request.remote_addr, request.args.get('mac'))
-                return('1~' + token + '~' + str(role[0]))
-            else:
-                return "0~"
+        if request.args.get('login').isdigit() and check_password(int(request.args.get('login')), request.args.get('password')):
+            # print('ip', request.remote_addr)
+            token, role = making_token_for_session(int(request.args.get('login')), request.remote_addr, request.args.get('mac'))
+            return('1~' + token + '~' + str(role[0]))
+        else:
+            return "0~"
 
-        except:
-            return('0~')
+        # except:
+        #     return('0~')
 
     else:
         return '0~'
@@ -309,7 +331,11 @@ def get_salary():
 def get_client():
     if "phone" not in request.args:
         return "0~Введены не все поля"
-    sql = "SELECT id, name, phone, to_char(date_of_birth,'DD.MM.YYYY'), tg_id, \"e-mail\", role FROM staff WHERE phone = %s and role<2"
+    if users_roles[request.args.get('token')] == 3:
+        sql = "SELECT staff.id, name, phone, to_char(date_of_birth,'DD.MM.YYYY'), tg_id, \"e-mail\", role, \"user\".id FROM staff LEFT JOIN \"user\" ON staff_id = staff.id WHERE phone = %s"
+    else:
+        sql = "SELECT id, name, phone, to_char(date_of_birth,'DD.MM.YYYY'), tg_id, \"e-mail\", role FROM staff WHERE phone = %s and role<2"
+    
     cursor = conn.cursor()
     cursor.execute(sql, (request.args.get("phone"),))
     result = cursor.fetchall()
@@ -318,7 +344,8 @@ def get_client():
     # print(result)
     answer = ""
     for i in result:
-        answer += "~" + str(i[0]) + "|" + str(i[1]) + "|" + str(i[2]) + "|" + str(i[3]) + "|"+ str(i[4]) + "|" + str(i[5]) + "|" + str(i[6])
+        answer += "~" + '|'.join(map(str, i))
+        # answer += "~" + str(i[0]) + "|" + str(i[1]) + "|" + str(i[2]) + "|" + str(i[3]) + "|"+ str(i[4]) + "|" + str(i[5]) + "|" + str(i[6])
         
     
     # print(answer)
@@ -568,12 +595,16 @@ def new_clietn():
     Создание нового клиента
     От пользователя получаем Имя, Телефон, Дату рождения, Тг ид, Почту, Роль
     '''
-
+    answer = "1~"
     if ('name' not in request.args or 'phone' not in request.args or 
             'birth' not in request.args or 'tg_id' not in request.args or 
             'email' not in request.args or 'role' not in request.args):
         return '0~Введены не все поля'
-    sql = 'INSERT INTO staff (name, role, phone, date_of_birth, tg_id, "e-mail") VALUES (%s, %s, %s, %s, %s, %s)'
+
+    if request.args.get("role") == "2" and users_roles[request.args.get("token")] != 3:
+        return "0~Попытка создать админа без соответствующих полномочий"
+    
+    sql = 'INSERT INTO staff (name, role, phone, date_of_birth, tg_id, "e-mail") VALUES (%s, %s, %s, %s, %s, %s) RETURNING id'
     
 
     # Тут проверка на нуллы
@@ -587,10 +618,16 @@ def new_clietn():
     
     cursor = conn.cursor()
     cursor.execute(sql, (request.args.get("name"), request.args.get("role"), request.args.get("phone"), birth, tg_id, request.args.get("email")))
+    staff_id = cursor.fetchone()
     conn.commit()
+    if request.args.get("role") == "2":
+        sql = "INSERT INTO \"user\" (password, staff_id) VALUES (%s, %s) RETURNING id"
+        cursor.execute(sql, (making_hash(request.args.get("password")), staff_id[0]))
+        staff_id = cursor.fetchone()[0]
+        answer += str(staff_id)
     cursor.close()
     
-    return "1~"
+    return answer
 
 # Создание нового курса
 @app.route("/new/cours")
@@ -647,12 +684,17 @@ def new_place():
 # Редактирование клиента
 @app.route("/edit/client")
 def edit_client():
+    answer = ""
     if ('name' not in request.args or 'phone' not in request.args or 
             'birth' not in request.args or 'tg_id' not in request.args or 
             'email' not in request.args or 'id' not in request.args or
             'role' not in request.args):
         return '0~Введены не все поля'
-    sql = 'UPDATE staff SET name = %s, role = %s, phone= %s, date_of_birth = %s, tg_id= %s, "e-mail" = %s WHERE id = %s'
+    # Если создаём админа не с главного админа
+    if request.args.get("role") == "2" and users_roles[request.args.get("token")] != 3:
+        return "0~Попытка создать админа без соответствующих полномочий"
+    # Будем обновлять пользователя
+    sql = 'UPDATE staff SET name = %s, role = %s, phone= %s, date_of_birth = %s, tg_id= %s, "e-mail" = %s WHERE id = %s RETURNING id'
     
 
     # Тут проверка на нуллы
@@ -663,13 +705,43 @@ def edit_client():
         birth = None
     if request.args.get("tg_id") == "Null":
         tg_id = None
-        
+    # Выполняем sql код    
     cursor = conn.cursor()
     cursor.execute(sql, (request.args.get("name"), request.args.get("role"), request.args.get("phone"), birth, tg_id, request.args.get("email"), request.args.get("id") ))
+    staff_id = cursor.fetchone()
     conn.commit()
+    
+    # Узнаём, есть ли аккаунт (логин+пароль) у изменяемого пользователя
+    sql = "SELECT count(*) FROM \"user\" WHERE staff_id = %s"
+    cursor.execute(sql, (staff_id[0],))
+    count_of_users = cursor.fetchone()
+
+    # Если создаём админа
+    if request.args.get("role") == "2":
+        # Если аккаунт есть, его меняем
+        # Иначе создаём
+        if count_of_users[0] == 1:
+            sql = "UPDATE \"user\" SET password = %s WHERE staff_id = %s"
+            cursor.execute(sql, (making_hash(request.args.get("password")), staff_id[0]))
+        else:
+            sql = "INSERT INTO \"user\" (password, staff_id) VALUES (%s, %s) RETURNING id"
+            cursor.execute(sql, (making_hash(request.args.get("password")), staff_id[0]))
+            staff_id = cursor.fetchone()
+            answer = str(staff_id[0])
+        conn.commit()
+    # Если создаём не админа и есть аккаунт, то удалим аккаунт
+    elif count_of_users[0] != 0:
+        sql = "SELECT token FROM sessions WHERE user_id = (SELECT id FROM \"user\" WHERE staff_id=%s limit 1) and token != ''"
+        cursor.execute(sql, (staff_id[0],))
+        users_roles.pop(cursor.fetchone()[0])
+        sql = "DELETE FROM \"user\" WHERE staff_id = %s"
+        cursor.execute(sql, (staff_id[0],))
+        conn.commit()
+    
+
     cursor.close()
     
-    return "1~"
+    return "1~" + answer
 
 # Редактирование расписания
 @app.route("/edit/schedule")
