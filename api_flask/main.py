@@ -8,11 +8,13 @@ from datetime import date, datetime, timedelta
 '''
 TO DO
 
-Проверить ЗП
-Во всех функциях проверить case 3
-Сделать меню
-Сервер: Сделать дамб в отдельном потоке
-Сервер: Сделать лог
+?Написать тесты и реализовать
+Изменить интерфейс (bttn=>lbl)
+Убрать с десктопа отпарвку логина с токеном, оставить только токен
+Сервер: Доделать дамб в отдельном потоке (таблицы реализовать в корректном порядке)
+Проверить десктоп + сервер
+Сделать телеграм
+
 Запретить вводить &?
 Добавить гифку на время ожидания на клиент
 
@@ -50,7 +52,7 @@ cursor.close()
 
 
 def making_hash(password: str):
-    # Тут создаю хэш для нового пароля с солью
+    # Тут создаю хэш для нового пароля с солью 
     salt = uuid.uuid4().hex
     return hashlib.sha256(salt.encode() + password.encode()).hexdigest() + ':' + salt
     
@@ -78,14 +80,14 @@ def making_token_for_session(login: int, ip: str, mac: str):
     token = uuid.uuid4().hex
     cursor = conn.cursor()
     # Получаем старый токен, удалим его из словаря
-    sql = "SELECT token FROM sessions WHERE user_id=%s AND token!=''"
+    sql = "SELECT token FROM sessions WHERE user_id=%s AND token is not Null"
     cursor.execute(sql, (login,))
     token_before_delete = cursor.fetchone()
     if token_before_delete is not None:
         users_roles.pop(token_before_delete[0])
     
     # Очистим сессии, создадим новые, вернём токен и роль
-    sql = "UPDATE sessions SET token = '' WHERE user_id = %s AND token != ''"
+    sql = "UPDATE sessions SET token = Null WHERE user_id = %s AND token is not Null"
     cursor.execute(sql,(login,))
     conn.commit()
     sql = "INSERT INTO sessions(user_id, token, time, ip, mac) VALUES(%s,%s,%s,%s,%s)"
@@ -107,14 +109,14 @@ def before_request():
     if request.path == "/login":
         return 
     # Если нет в запросе логина мака токена
-    elif "token" not in request.args or "mac" not in request.args or "login" not in request.args:
+    elif "token" not in request.args or "mac" not in request.args: # or "login" not in request.args:
         # Заставляем переавторизироваться
         return "-1~"
     
     # Получаем информацию о сессии пользователя с конкретным токеном и мак 
-    sql = "SELECT * FROM sessions WHERE user_id=%s AND token=%s AND mac=%s"
+    sql = "SELECT * FROM sessions WHERE token=%s AND mac=%s"
     cursor = conn.cursor();
-    cursor.execute(sql,(request.args.get("login"), request.args.get("token"), request.args.get("mac")))
+    cursor.execute(sql,(request.args.get("token"), request.args.get("mac")))
     user = cursor.fetchone()
     cursor.close()
     print(users_roles)
@@ -129,7 +131,7 @@ def before_request():
     # Если ip и mac пердыдущей сессии не изменился
     elif user[4] == request.remote_addr and user[5] == request.args.get("mac"):
         # Зановов создаём токен без реавторизации
-        token, role = making_token_for_session(request.args.get("login"), request.remote_addr, request.args.get("mac"))
+        token, role = making_token_for_session(user[1], request.remote_addr, request.args.get("mac"))
         return "3~" + token
     else:
         # Если время вышло и новый мак/ip
@@ -695,7 +697,6 @@ def edit_client():
         return "0~Попытка создать админа без соответствующих полномочий"
     # Будем обновлять пользователя
     sql = 'UPDATE staff SET name = %s, role = %s, phone= %s, date_of_birth = %s, tg_id= %s, "e-mail" = %s WHERE id = %s RETURNING id'
-    
 
     # Тут проверка на нуллы
     # Если Null, то запомним как None
@@ -707,7 +708,11 @@ def edit_client():
         tg_id = None
     # Выполняем sql код    
     cursor = conn.cursor()
-    cursor.execute(sql, (request.args.get("name"), request.args.get("role"), request.args.get("phone"), birth, tg_id, request.args.get("email"), request.args.get("id") ))
+    cursor.execute(sql, (
+        request.args.get("name"), request.args.get("role"),
+        request.args.get("phone"), birth, tg_id, request.args.get("email"),
+        request.args.get("id") ))
+
     staff_id = cursor.fetchone()
     conn.commit()
     

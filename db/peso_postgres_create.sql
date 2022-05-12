@@ -130,7 +130,7 @@ CREATE TABLE "public.dog_cours" (
 CREATE TABLE "public.sessions" (
 	"id" serial NOT NULL,
 	"user_id" int NOT NULL,
-	"token" varchar(255) NOT NULL,
+	"token" varchar(255),
 	"time" bigint NOT NULL,
 	"ip" varchar(255) NOT NULL,
 	"mac" varchar(255) NOT NULL,
@@ -163,7 +163,7 @@ ALTER TABLE "user" ADD CONSTRAINT "user_fk0" FOREIGN KEY ("staff_id") REFERENCES
 ALTER TABLE "dog_cours" ADD CONSTRAINT "dog_cours_fk0" FOREIGN KEY ("dog_id") REFERENCES "dogs"("id");
 ALTER TABLE "dog_cours" ADD CONSTRAINT "dog_cours_fk1" FOREIGN KEY ("cours_id") REFERENCES "courses"("id");
 
-ALTER TABLE "sessions" ADD CONSTRAINT "sessions_fk0" FOREIGN KEY ("user_id") REFERENCES "user"("id");
+ALTER TABLE "sessions" ADD CONSTRAINT "sessions_fk0" FOREIGN KEY ("user_id") REFERENCES "user"("id") ON DELETE CASCADE;
 
 
 
