@@ -4,14 +4,24 @@ import uuid
 import psycopg2
 import time
 from datetime import date, datetime, timedelta
+import os
 
 '''
 TO DO
 
+Рассылка сообщений на почту/тг
+
+Реализация подгрузки бд:
+удалить все записи, запустить файл с новыми данными
+
+Поменять принцип формирования адреса. На главной форме after_route и route 
 ?Написать тесты и реализовать
+Метить людей без тг
+логин новому админу
+Выбор либо админ либо кинолог. Без одновременного
+проверкка на выбор собаки в занятиях + удаление всего
 Изменить интерфейс (bttn=>lbl)
-Убрать с десктопа отпарвку логина с токеном, оставить только токен
-Сервер: Доделать дамб в отдельном потоке (таблицы реализовать в корректном порядке)
+Сервер: Доделать дамб в отдельном потоке 
 Проверить десктоп + сервер
 Сделать телеграм
 
@@ -19,36 +29,8 @@ TO DO
 Добавить гифку на время ожидания на клиент
 
 '''
-
-### Подключение к БД 
-conf = ''
-# Читаю из файла пароли логины
-try:
-    with open('conf.txt', 'r') as f:
-        conf = f.read()
-    conf = conf.split('~')
-    conn = psycopg2.connect(dbname=conf[0], user=conf[1],
-                            password=conf[2], host=conf[3])
-except FileNotFoundError:
-    raise FileNotFoundError('Файл не найден. Проверьте файл conf.txt в дирректории')
-except IndexError:
-    raise IndexError('Файл conf.txt заполнен неверно. Проверьте его и перезапустите программу')
-except psycopg2.OperationalError:
-    raise psycopg2.OperationalError('В файле conf.txt указаны некорректные данные. Подключение к БД сорвалось.')
-
-
 app = Flask(__name__)
 
-### Словарь для ролей
-users_roles = {}
-cursor = conn.cursor()
-sql = "SELECT token, role FROM sessions JOIN \"user\" ON  \"user\".id = user_id JOIN staff ON staff.id = staff_id where token!='' "
-cursor.execute(sql)
-place_for_roles_before_main = cursor.fetchall()
-for i in place_for_roles_before_main:
-    users_roles[i[0]] = i[1]
-print(users_roles)
-cursor.close()
 
 
 def making_hash(password: str):
@@ -69,7 +51,7 @@ def check_password(login: int, user_password: str):
     user_info = cursor.fetchone()
     cursor.close()
     # print(user_info)
-    if len(user_info) == 0:
+    if user_info is None or len(user_info) == 0:
         return False
     # user_info: id (login); password; staff_id (user's id, who own this pass)
     password, salt = user_info[1].split(':')
@@ -336,7 +318,7 @@ def get_client():
     if users_roles[request.args.get('token')] == 3:
         sql = "SELECT staff.id, name, phone, to_char(date_of_birth,'DD.MM.YYYY'), tg_id, \"e-mail\", role, \"user\".id FROM staff LEFT JOIN \"user\" ON staff_id = staff.id WHERE phone = %s"
     else:
-        sql = "SELECT id, name, phone, to_char(date_of_birth,'DD.MM.YYYY'), tg_id, \"e-mail\", role FROM staff WHERE phone = %s and role<2"
+        sql = "SELECT id, name, phone, to_char(date_of_birth,'DD.MM.YYYY'), tg_id, \"e-mail\", role, 'None' FROM staff WHERE phone = %s and role<2"
     
     cursor = conn.cursor()
     cursor.execute(sql, (request.args.get("phone"),))
@@ -388,7 +370,7 @@ def get_dog_clients():
     if "dog_id" not in request.args:
         return "0~Введены не все поля"
     
-    
+    # 
     sql = ("SELECT staff.id, name, phone, to_char(date_of_birth,'DD.MM.YYYY'), tg_id, \"e-mail\", role FROM staff JOIN users_dog ON staff.id = user_id WHERE dog_id = %s")
     cursor = conn.cursor()
     cursor.execute(sql, (request.args.get("dog_id"),))
@@ -443,9 +425,10 @@ def get_pre_dogs():
     staff_index = " "
     cours_index = " "
     place_index = " "
-
+    # print("dog_info",dog_info)
+    # print("courses",courses)
     for i in courses:
-        answer += "|" + str(i[0]) + " " + str(i[1]) + " " + str(i[2]) + " " + str(i[3])
+        answer += "|" + str(i[0]) + "@" + str(i[1]) + "@" + str(i[2]) + "@" + str(i[3])
         # Если пришло id собаки, то ищем в отправляемом нужный id
         if dog_info != "" and i[0] == dog_info[5]:
             cours_index = courses.index(i)
@@ -738,7 +721,10 @@ def edit_client():
     elif count_of_users[0] != 0:
         sql = "SELECT token FROM sessions WHERE user_id = (SELECT id FROM \"user\" WHERE staff_id=%s limit 1) and token != ''"
         cursor.execute(sql, (staff_id[0],))
-        users_roles.pop(cursor.fetchone()[0])
+        id_to_delete = cursor.fetchone()
+        print(id_to_delete)
+        if (id_to_delete is not None) and id_to_delete in users_roles:
+            users_roles.pop(id_to_delete[0])
         sql = "DELETE FROM \"user\" WHERE staff_id = %s"
         cursor.execute(sql, (staff_id[0],))
         conn.commit()
@@ -757,19 +743,21 @@ def edit_schedule():
     to_edit = request.args.get("args").split("|")
     to_edit.pop(-1)
 
-    
-    if len(to_edit) != 1:
+    sql = ""
+    if request.args.get("args")[0] != ".":
         sql = "INSERT INTO lesson (date, dog_id, place_id, type_of_lesson, staff_id) VALUES (to_timestamp(%s, 'HH24:MI DD.MM.YYYY'), %s, %s, %s, %s)"
         for i in range(int((len(to_edit))/5 - 1)):
             sql += ",(to_timestamp(%s, 'HH24:MI DD.MM.YYYY'), %s, %s, %s, %s)"
     sql_pre = "DELETE FROM lesson WHERE to_char(date, 'DD.MM.YYYY') = %s and staff_id = %s"
     
-    print(tuple(to_edit))
-    print(sql)
+    # print(tuple(to_edit))
+    # print(sql)
 
     cursor = conn.cursor()
+    # print(to_edit[0].split())
     cursor.execute(sql_pre, (to_edit[0].split()[1], to_edit[4]) )
-    cursor.execute(sql, tuple(to_edit))
+    if sql != "":
+        cursor.execute(sql, tuple(to_edit))
     conn.commit()
     cursor.close()
     
@@ -800,7 +788,44 @@ def delete_dog_client():
 
     return answer
 
+@app.route("/upload/database", methods=['POST'])
+def new_database():
+    print(request.files)
+    file = request.files['file']
+    file.save("./"+file.filename)
+    return "1~"
+
 
 
 if __name__ == "__main__":
+    ### Подключение к БД 
+    conf = ''
+    # Читаю из файла пароли логины
+    try:
+        with open('conf.txt', 'r') as f:
+            conf = f.read()
+        conf = conf.split('~')
+        conn = psycopg2.connect(dbname=conf[0], user=conf[1],
+                                password=conf[2], host=conf[3])
+    except FileNotFoundError:
+        raise FileNotFoundError('Файл не найден. Проверьте файл conf.txt в дирректории')
+    except IndexError:
+        raise IndexError('Файл conf.txt заполнен неверно. Проверьте его и перезапустите программу')
+    except psycopg2.OperationalError:
+        raise psycopg2.OperationalError('В файле conf.txt указаны некорректные данные. Подключение к БД сорвалось.')
+
+
+    
+
+    ### Словарь для ролей
+    users_roles = {}
+    cursor = conn.cursor()
+    sql = "SELECT token, role FROM sessions JOIN \"user\" ON  \"user\".id = user_id JOIN staff ON staff.id = staff_id where token!='' "
+    cursor.execute(sql)
+    place_for_roles_before_main = cursor.fetchall()
+    for i in place_for_roles_before_main:
+        users_roles[i[0]] = i[1]
+    print(users_roles)
+    cursor.close()
+
     app.run(debug=True)

@@ -1,21 +1,23 @@
 import psycopg2
 from datetime import date, datetime, timedelta
 ### Подключение к БД 
-conf = ''
+# conf = ''
 # Читаю из файла пароли логины
 
-with open('conf.txt', 'r') as f:
-    conf = f.read()
-conf = conf.split('~')
-conn = psycopg2.connect(dbname=conf[0], user=conf[1],
-                        password=conf[2], host=conf[3])
+# with open('conf.txt', 'r') as f:
+#     conf = f.read()
+# conf = conf.split('~')
+# conn = psycopg2.connect(dbname=conf[0], user=conf[1],
+#                         password=conf[2], host=conf[3])
 # conn = psycopg2.connect("dbname=test user=postgres")  # change this according to your RDBMS configuration
 # cursor = conn.cursor()
 def dumb(cursor):
-    table_names = ["advertisement", "courses", "dog_cours",
-                    "dogs", "lesson", "places", "sessions",
-                    "staff", "types_of_lessons", "\"user\"",
-                    "users_dog"]  # place your table name here
+    table_names = [
+        "staff", "\"user\"", "advertisement", 
+        "courses", "places", "dogs", "dog_cours", 
+        "types_of_lessons", "users_dog", 
+        "sessions", "lesson" ]  # place your table name here
+    
     with open("table_dump.sql", "w") as f:
         for table_name in table_names:
             cursor.execute("SELECT * FROM %s" % (table_name))  # change the query according to your needs
@@ -38,10 +40,7 @@ def dumb(cursor):
 
 
      
-cursor = conn.cursor()
-dumb(cursor)
-cursor.close()
-conn.close()
+
          
               
             
