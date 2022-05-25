@@ -5,14 +5,16 @@ import psycopg2
 import time
 from datetime import date, datetime, timedelta
 import os
+from load_db import load
+# from dumb import dumb
 
 '''
 TO DO
 
 Рассылка сообщений на почту/тг
 
-Реализация подгрузки бд:
-удалить все записи, запустить файл с новыми данными
+Убрать MsgBox, сделать первую страницу
+html шаблон
 
 Поменять принцип формирования адреса. На главной форме after_route и route 
 ?Написать тесты и реализовать
@@ -32,13 +34,14 @@ TO DO
 app = Flask(__name__)
 
 
-
+# Хеширование пароля
 def making_hash(password: str):
     # Тут создаю хэш для нового пароля с солью 
     salt = uuid.uuid4().hex
     return hashlib.sha256(salt.encode() + password.encode()).hexdigest() + ':' + salt
     
 
+# Проверка пароля
 def check_password(login: int, user_password: str):
     ###
     # Check password in DB and given
@@ -56,7 +59,9 @@ def check_password(login: int, user_password: str):
     # user_info: id (login); password; staff_id (user's id, who own this pass)
     password, salt = user_info[1].split(':')
     return password == hashlib.sha256(salt.encode() + user_password.encode()).hexdigest()
-    
+
+
+# Создание токена для сессии   
 def making_token_for_session(login: int, ip: str, mac: str):
     ctime = time.time()
     token = uuid.uuid4().hex
@@ -145,6 +150,7 @@ def login():
     else:
         return '0~'
 
+
 # Получение информации до записи на занятие
 @app.route("/get/pre_lesson")
 def pre_lesson():
@@ -214,6 +220,7 @@ def pre_lesson():
     
     # print(answer)
     return '1' + answer
+
 
 # Получение расписание кинолога
 @app.route("/get/schedule")
@@ -335,6 +342,7 @@ def get_client():
     # print(answer)
     return '1' + answer
 
+
 # Поиск собак клиента
 @app.route("/get/client/dog")
 def get_clients_dog():
@@ -364,6 +372,7 @@ def get_clients_dog():
     # print(answer)
     return '1' + answer
 
+
 # Поиск собак клиента
 @app.route("/get/dog/client")
 def get_dog_clients():
@@ -384,6 +393,7 @@ def get_dog_clients():
     
     # print(answer)
     return '1' + answer
+
 
 # Получение инофрмации до создания собаки (возможные абонементы и прочее)
 @app.route("/get/pre_dogs")
@@ -452,6 +462,7 @@ def get_pre_dogs():
     
     return answer
 
+
 # Поиск курсов
 @app.route("/get/courses")
 def get_courses():
@@ -472,6 +483,7 @@ def get_courses():
     # print(answer)
     return '1' + answer
 
+
 # Поиск площадок
 @app.route("/get/places")
 def get_places():
@@ -488,9 +500,98 @@ def get_places():
     for i in result:
         answer += "~" + str(i[0]) + "|" + i[1] + "|" + i[2] + "|" + str(i[3])
         
+    # print(answer)
+    return '1' + answer
+
+
+# Поиск объявлениz
+@app.route("/get/advertisement")
+def get_advertisement():
+    if "id" not in request.args:
+        return "0~Нет id"
+    
+    # Получаем все курсы
+    sql = "SELECT id, to_char(date_to_post,'DD.MM.YYYY'), sed_to, text FROM advertisement WHERE id = %s"
+    cursor = conn.cursor()
+    cursor.execute(sql, (request.args.get("id"),))
+    result = cursor.fetchall()
+    cursor.close()
+
+    # print(result)
+    answer = ""
+    # Формируем ответ
+    for i in result:
+        answer += "~" + str(i[0]) + "~" + i[1] + "~" + i[2] + "~" + i[3]
+        
     
     # print(answer)
     return '1' + answer
+
+
+# Поиск объявлений
+@app.route("/get/ad")
+def get_ad():
+    # Получаем все курсы
+    sql = "SELECT id, to_char(date_to_post,'DD.MM.YYYY'), sed_to, created_by FROM advertisement "
+    cursor = conn.cursor()
+    cursor.execute(sql)
+    result = cursor.fetchall()
+    cursor.close()
+
+    # print(result)
+    answer = ""
+    # Формируем ответ
+    for i in result:
+        answer += "~" + str(i[0]) + "|" + i[1] + "|" + i[2] + "|" + str(i[3])
+        
+    
+    # print(answer)
+    return '1' + answer
+
+
+# Добавление собаки клиента
+@app.route("/add/dog/client")
+def add_dog_client():
+    # Проверка на все аргументы
+    if ('dog_id' not in request.args or 'id' not in request.args):
+        return '0~Введены не все поля'
+    answer = "0~"
+
+    # Проверяем, существует ли такая связь
+    sql = "SELECT count(*) from users_dog WHERE dog_id = %s AND user_id = %s"
+    cursor = conn.cursor()
+    cursor.execute(sql, (request.args.get("dog_id"), request.args.get("id") ))
+    amount = cursor.fetchone()
+    print(amount)
+
+    # Если связи нет, то добавляем
+    if amount[0] == 0:
+        sql = "INSERT INTO users_dog VALUES (DEFAULT, %s, %s)"
+        cursor.execute(sql, (request.args.get("id"), request.args.get("dog_id") ))
+        conn.commit()
+        answer = "1~"
+    cursor.close()
+    
+    return answer
+
+
+# Добавление собаки курса
+@app.route("/add/dog/cours")
+def add_dog_cours():
+    # Проверка на все аргументы
+    if ('dog_id' not in request.args or 'cours_id' not in request.args):
+        return '0~Введены не все поля'
+    answer = "1~"
+
+    # Проверяем, существует ли такая связь
+    sql = "INSERT INTO dog_cours (dog_id, cours_id, date_of_cours) VALUES (%s, %s, %s)"
+    cursor = conn.cursor()
+    cursor.execute(sql, (request.args.get("dog_id"), request.args.get("cours_id"), date.today() ))
+    conn.commit()
+    cursor.close()
+    
+    return answer
+
 
 # Создание новой собаки
 @app.route("/new/dog")
@@ -531,47 +632,6 @@ def new_dog():
     
     return "1~"
 
-# Добавление собаки клиента
-@app.route("/add/dog/client")
-def add_dog_client():
-    # Проверка на все аргументы
-    if ('dog_id' not in request.args or 'id' not in request.args):
-        return '0~Введены не все поля'
-    answer = "0~"
-
-    # Проверяем, существует ли такая связь
-    sql = "SELECT count(*) from users_dog WHERE dog_id = %s AND user_id = %s"
-    cursor = conn.cursor()
-    cursor.execute(sql, (request.args.get("dog_id"), request.args.get("id") ))
-    amount = cursor.fetchone()
-    print(amount)
-
-    # Если связи нет, то добавляем
-    if amount[0] == 0:
-        sql = "INSERT INTO users_dog VALUES (DEFAULT, %s, %s)"
-        cursor.execute(sql, (request.args.get("id"), request.args.get("dog_id") ))
-        conn.commit()
-        answer = "1~"
-    cursor.close()
-    
-    return answer
-
-# Добавление собаки курса
-@app.route("/add/dog/cours")
-def add_dog_cours():
-    # Проверка на все аргументы
-    if ('dog_id' not in request.args or 'cours_id' not in request.args):
-        return '0~Введены не все поля'
-    answer = "1~"
-
-    # Проверяем, существует ли такая связь
-    sql = "INSERT INTO dog_cours (dog_id, cours_id, date_of_cours) VALUES (%s, %s, %s)"
-    cursor = conn.cursor()
-    cursor.execute(sql, (request.args.get("dog_id"), request.args.get("cours_id"), date.today() ))
-    conn.commit()
-    cursor.close()
-    
-    return answer
 
 # Создание нового клиента
 @app.route("/new/client")
@@ -610,9 +670,11 @@ def new_clietn():
         cursor.execute(sql, (making_hash(request.args.get("password")), staff_id[0]))
         staff_id = cursor.fetchone()[0]
         answer += str(staff_id)
+    conn.commit()
     cursor.close()
     
     return answer
+
 
 # Создание нового курса
 @app.route("/new/cours")
@@ -640,6 +702,7 @@ def new_cours():
     
     return "1~"
 
+
 # Создание новой площадки
 @app.route("/new/place")
 def new_place():
@@ -656,7 +719,7 @@ def new_place():
         sql = 'UPDATE places SET name=%s, address=%s,  is_actual=%s WHERE id=%s'
         to_sql = (request.args.get('name'), request.args.get('address'), request.args.get('actual'), request.args.get('id') )
     else:
-        sql = "INSERT INTO places (name, address, is_actual) VALUES (%s, %s, %s, %s)"
+        sql = "INSERT INTO places (name, address, is_actual) VALUES (%s, %s, %s)"
         to_sql = (request.args.get('name'), request.args.get('address'), request.args.get('is_actual'))
     
     cursor = conn.cursor()
@@ -665,6 +728,40 @@ def new_place():
     cursor.close()
     
     return "1~"
+
+
+# Создание новой рассылки
+@app.route("/new/ad")
+def new_ad():
+    '''
+    Создание новой рассылки
+    От пользователя получаем текст, кому слать, когда слать, ?id
+    '''
+    # Проверка
+    if ('text' not in request.args or 'send_to' not in request.args or
+            'created_by' not in request.args or 'date' not in request.args):
+        return '0~Введены не все поля'
+    if request.args.get('send_to') == "":
+        send_to = "None"
+    else:
+        send_to = request.args.get('send_to')
+
+    if 'id' in request.args:
+        sql = 'UPDATE advertisement SET text=%s, sed_to=%s,  created_by=%s, date_to_post=%s WHERE id=%s'
+        to_sql = (request.args.get('text'), send_to, request.args.get('created_by'), 
+                request.args.get('date'), request.args.get('id') )
+    else:
+        sql = "INSERT INTO advertisement (text, sed_to, date_to_post, created_by) VALUES (%s, %s, %s, %s)"
+        to_sql = (request.args.get('text'), send_to, 
+                request.args.get('date'), request.args.get('created_by'))
+    print(sql)
+    cursor = conn.cursor()
+    cursor.execute(sql, to_sql)
+    conn.commit()
+    cursor.close()
+    
+    return "1~"
+
 
 # Редактирование клиента
 @app.route("/edit/client")
@@ -734,6 +831,7 @@ def edit_client():
     
     return "1~" + answer
 
+
 # Редактирование расписания
 @app.route("/edit/schedule")
 def edit_schedule():
@@ -763,6 +861,7 @@ def edit_schedule():
     
     return "1~"
 
+
 # Удаление хозяина у человека
 @app.route("/delete/dog/client")
 def delete_dog_client():
@@ -788,17 +887,36 @@ def delete_dog_client():
 
     return answer
 
+
+# Приём бд
 @app.route("/upload/database", methods=['POST'])
 def new_database():
-    print(request.files)
-    file = request.files['file']
-    file.save("./"+file.filename)
-    return "1~"
+    # Если гл. админ
+    if users_roles[request.args.get('token')] == 3:
+        print(request.files)
+        # Загружаем файл
+        file = request.files['file']
+        file.save("./DB.sql")
+        cursor = conn.cursor()
+        try:
+            load(cursor)
+        except psycopg2.errors.SyntaxError:
+            conn.rollback()
+        conn.commit()
+        cursor.close()
+        conn.close()
+        # Удаляем файд с БД
+        os.remove('./table_dump.sql')
+        # Заново запускаем программу
+        main()
+        return "1~"
+    else:
+        return "0~"
 
 
-
-if __name__ == "__main__":
+def main():
     ### Подключение к БД 
+    global conn, users_roles
     conf = ''
     # Читаю из файла пароли логины
     try:
@@ -818,7 +936,6 @@ if __name__ == "__main__":
     
 
     ### Словарь для ролей
-    users_roles = {}
     cursor = conn.cursor()
     sql = "SELECT token, role FROM sessions JOIN \"user\" ON  \"user\".id = user_id JOIN staff ON staff.id = staff_id where token!='' "
     cursor.execute(sql)
@@ -826,6 +943,12 @@ if __name__ == "__main__":
     for i in place_for_roles_before_main:
         users_roles[i[0]] = i[1]
     print(users_roles)
+    # dumb(cursor)
     cursor.close()
 
+
+if __name__ == "__main__":
+    conn = None
+    users_roles = {}
+    main()
     app.run(debug=True)

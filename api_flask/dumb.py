@@ -1,5 +1,5 @@
 import psycopg2
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 ### Подключение к БД 
 # conf = ''
 # Читаю из файла пароли логины
@@ -18,13 +18,13 @@ def dumb(cursor):
         "types_of_lessons", "users_dog", 
         "sessions", "lesson" ]  # place your table name here
     
-    with open("table_dump.sql", "w") as f:
+    with open("table_dump.sql", "w", encoding='utf8') as f:
         for table_name in table_names:
             cursor.execute("SELECT * FROM %s" % (table_name))  # change the query according to your needs
             column_names = []
             columns_descr = cursor.description
             for c in columns_descr:
-                column_names.append(c[0])
+                column_names.append("\"" + c[0] + "\"")
             insert_prefix = 'INSERT INTO %s (%s) VALUES ' % (table_name, ', '.join(column_names))
             rows = cursor.fetchall()
             for row in rows:
@@ -34,6 +34,8 @@ def dumb(cursor):
                         row_data.append('NULL')
                     elif isinstance(rd, datetime):
                         row_data.append("'%s'" % (rd.strftime('%Y-%m-%d %H:%M:%S') ))
+                    elif isinstance(rd, date):
+                        row_data.append("'%s'" % (rd.strftime('%Y-%m-%d') ))
                     else:
                         row_data.append(repr(rd))
                 f.write('%s (%s);\n' % (insert_prefix, ', '.join(row_data)))  # this is the text that will be put in the SQL file. You can change it if you wish.

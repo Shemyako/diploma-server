@@ -4,14 +4,15 @@ import time
 from threading import Thread
 import datetime
 from dumb import dumb
+import os
 
 """
 TO DO
-Сделать обновление БД через отправку документа от main_user
+В поток с отправкой уведомлений добавить новый sleep и отправку рекламы
 """
 
 main_user = 424184511
-p = '1551048291:AAFcPy0_Pblea-lmnFuF-A_cZByCqdNK38k'
+p = 'Token'
 bttns = ["Настройки", "Отключить оповещения", "Включить оповещения", "Назад", "Мой id"]
 bot = telebot.TeleBot(p)#, threaded=False)
 admins = set()
@@ -39,9 +40,9 @@ def settings_bttn(message):
     itembtn3 = telebot.types.KeyboardButton('Назад')
     markup.add(itembtn1)
     markup.add(itembtn2)
-    markup.add(itembtn2)
-    bot.send_message(message.chat.id, 'Приветствую. Свяжитесь с администратором. Если Ваши данные уже есть у администратора,' +
-            ' то Вам будут приходить оповещения о грядущих уроках.\nНиже находятся кнопки с настройками. Если они Вам мешают, можете их скрыть, нажав', reply_markup=markup)
+    markup.add(itembtn3)
+    bot.send_message(message.chat.id, 'Воспользуйтесь кнопками ниже. Если Вы не хотите,' + 
+        ' чтобы Вам приходили оповещения о заняхиях, напишите об этом администратору', reply_markup=markup)
 
 
 # Нажатие на кнопку Отключить оповещения
@@ -102,19 +103,6 @@ def repeat(message):
             parse_mode= 'Markdown')                
 
 
-try:
-    with open('conf.txt', 'r') as f:
-        conf = f.read()
-    conf = conf.split('~')
-    conn = psycopg2.connect(dbname=conf[0], user=conf[1],
-                            password=conf[2], host=conf[3])
-except FileNotFoundError:
-    raise FileNotFoundError('Файл не найден. Проверьте файл conf.txt в дирректории')
-except IndexError:
-    raise IndexError('Файл conf.txt заполнен неверно. Проверьте его и перезапустите программу')
-except psycopg2.OperationalError:
-    raise psycopg2.OperationalError('В файле conf.txt указаны некорректные данные. Подключение к БД сорвалось.')
-
 
 def main():
     global admins, users
@@ -132,11 +120,6 @@ def main():
     pre_admins = cursor.fetchall()
     users = set(*pre_admins)
     cursor.close()
-    # while True:
-        # try:
-    bot.polling(none_stop=True)
-        # except Exception as e:
-        #     print(e)
 
 # Отправка оповещений
 def send_notifications(day):
@@ -167,8 +150,10 @@ def send_notifications(day):
     # Отправляем уведомления клиенту/администратору
     for i in to_notifications_users:
         text_to_send = "Добрый вечер. Завтра у Вас будет занятие.\n" + i[5] + ", " + i[4].strftime("%H:%M") + ", инструктор - " + i[6]
+        # print(i)
         # Если есть тг. id, шлём клиенту
         if i[1] is not None:
+            # print(i[1])
             try:
                 bot.send_message(i[1], text_to_send, parse_mode = 'Markdown')
             except Exception:
@@ -236,10 +221,24 @@ def notifications():
         cursor = conn.cursor()
         dumb(cursor)
         cursor.close()
+        main()
         with open('./table_dump.sql', 'rb') as doc:
             bot.send_document(main_user, doc)
-        
+        os.remove('./table_dump.sql')
 
+
+try:
+    with open('conf.txt', 'r') as f:
+        conf = f.read()
+    conf = conf.split('~')
+    conn = psycopg2.connect(dbname=conf[0], user=conf[1],
+                            password=conf[2], host=conf[3])
+except FileNotFoundError:
+    raise FileNotFoundError('Файл не найден. Проверьте файл conf.txt в дирректории')
+except IndexError:
+    raise IndexError('Файл conf.txt заполнен неверно. Проверьте его и перезапустите программу')
+except psycopg2.OperationalError:
+    raise psycopg2.OperationalError('В файле conf.txt указаны некорректные данные. Подключение к БД сорвалось.')
 
 
 # th1 = Thread(target=main, daemon=True)
@@ -247,5 +246,14 @@ th2 = Thread(target=notifications, daemon=True)
 th2.start()
 # th1.start()
 main()
+
+# while True:
+#     try:
+bot.polling(none_stop=True)
+    # except KeyboardInterrupt:
+    #     print('Ola')
+    #     return
+    # except Exception as e:
+    #     print(e)
 # th1.join(1)
 th2.join(1)
