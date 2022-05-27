@@ -252,9 +252,11 @@ def get_schedule():
     
     print(schedule)
     print(request.args.get('date'))
+    is_seted = False
     # Проверим, есть ли расписание на день. Если нет, то предложим недельной давности
     date1 = datetime.strptime(request.args.get('date'), '%d.%m.%Y')
     if ( len(schedule) == 0 ) and date1 > datetime.today():
+        is_seted = True
         date1 = (date1 - timedelta(7)).strftime("%d.%m.%Y")
         print('date',date1)
         cursor.execute(sql, (request.args.get('id'), date1))
@@ -263,9 +265,12 @@ def get_schedule():
 
     cursor.close()
     
-    
-    for i in schedule:
-        answer += "~" + str(i[0]) + "|" + i[1] + "|" + str(i[2]) + " " + i[3] + "|" + str(i[4]) + " " + i[5] + "|" + str(i[6]) + " " + i[7] + "|" + i[8]
+    if not is_seted:
+        for i in schedule:
+            answer += "~" + str(i[0]) + "|" + i[1] + "|" + str(i[2]) + " " + i[3] + "|" + str(i[4]) + " " + i[5] + "|" + str(i[6]) + " " + i[7] + "|" + i[8]
+    else:
+        for i in schedule:
+            answer += "~" + "-1|" + i[1] + "|" + str(i[2]) + " " + i[3] + "|" + str(i[4]) + " " + i[5] + "|" + str(i[6]) + " " + i[7] + "|" + i[8]
     # print(answer)
     return '1' + answer
 
@@ -307,7 +312,7 @@ def get_salary():
 
     answer = "~"
     for i in result:
-        answer += str(i[0]) + "|" + str(i[1]) + "|" + str(i[2]) + "|" + str(i[3]) + "|" 
+        answer += str(i[0]) + "|" + str(i[1]) + "|" + str(i[2]) + "|" + str(i[3]) + "@" 
     
     if total_salary[0] is None:
         answer += "~0"
@@ -423,7 +428,7 @@ def get_pre_dogs():
     # Получаем информацию о собаке
     dog_info = ""
     if "dog_id" in request.args:
-        sql = "SELECT dogs.id, name, breed, staff_id, place_for_lesson, cours_id, is_learning FROM dogs JOIN dog_cours ON dog_id = dogs.id WHERE dogs.id = %s ORDER BY date_of_cours DESC"
+        sql = "SELECT dogs.id, name, breed, staff_id, place_for_lesson, cours_id, is_learning FROM dogs JOIN dog_cours ON dog_id = dogs.id WHERE dogs.id = %s ORDER BY date_of_cours, dog_cours.id DESC"
         cursor.execute(sql, (request.args.get("dog_id"),))
         dog_info = cursor.fetchone()
         # print(dog_info)
@@ -461,6 +466,27 @@ def get_pre_dogs():
     # print(staff_index, cours_index, place_index)
     
     return answer
+
+
+# Поиск типов занятий
+@app.route("/get/types")
+def get_types():
+    # Получаем все курсы
+    sql = "SELECT id, name, from_client, for_instructor, is_visible FROM types_of_lessons"
+    cursor = conn.cursor()
+    cursor.execute(sql)
+    result = cursor.fetchall()
+    cursor.close()
+
+    # print(result)
+    answer = ""
+    # Формируем ответ
+    for i in result:
+        answer += "~" + str(i[0]) + "|" + str(i[1]) + "|" + str(i[2]) + "|" + str(i[3]) + "|" + str(i[4])
+        
+    
+    # print(answer)
+    return '1' + answer
 
 
 # Поиск курсов
@@ -656,13 +682,16 @@ def new_clietn():
     # Если Null, то запомним как None
     birth = request.args.get("birth")
     tg_id = request.args.get("tg_id")
-    if request.args.get("birth") == "Null":
+    mail = request.args.get("email")
+    if birth == "Null":
         birth = None
-    if request.args.get("tg_id") == "Null":
+    if tg_id == "Null":
         tg_id = None
+    if mail == "Null":
+        mail = None
     
     cursor = conn.cursor()
-    cursor.execute(sql, (request.args.get("name"), request.args.get("role"), request.args.get("phone"), birth, tg_id, request.args.get("email")))
+    cursor.execute(sql, (request.args.get("name"), request.args.get("role"), request.args.get("phone"), birth, tg_id, mail))
     staff_id = cursor.fetchone()
     conn.commit()
     if request.args.get("role") == "2":
@@ -674,6 +703,33 @@ def new_clietn():
     cursor.close()
     
     return answer
+
+
+# Создание нового типа занятия
+@app.route("/new/type")
+def new_type():
+    '''
+    Создание нового курса
+    От пользователя получаем название, кол-во, цена, актуальность, ?id
+    '''
+
+    if ('name' not in request.args or 'amount' not in request.args or 
+            'price' not in request.args or 'actual' not in request.args):
+        return '0~Введены не все поля'
+    
+    if 'id' in request.args:
+        sql = 'UPDATE types_of_lessons SET name=%s, from_client=%s, for_instructor=%s, is_visible=%s WHERE id=%s'
+        to_sql = (request.args.get('name'), request.args.get('amount'), request.args.get('price'), request.args.get('actual'), request.args.get('id') )
+    else:
+        sql = "INSERT INTO types_of_lessons (name, from_client, for_instructor, is_visible) VALUES (%s, %s, %s, %s)"
+        to_sql = (request.args.get('name'), request.args.get('amount'), request.args.get('price'), request.args.get('actual'))
+    
+    cursor = conn.cursor()
+    cursor.execute(sql, to_sql)
+    conn.commit()
+    cursor.close()
+    
+    return "1~"
 
 
 # Создание нового курса
@@ -693,7 +749,7 @@ def new_cours():
         to_sql = (request.args.get('name'), request.args.get('amount'), request.args.get('price'), request.args.get('actual'), request.args.get('id') )
     else:
         sql = "INSERT INTO courses (name, amount, price, is_actual) VALUES (%s, %s, %s, %s)"
-        to_sql = (request.args.get('name'), request.args.get('amount'), request.args.get('price'), request.args.get('is_actual'))
+        to_sql = (request.args.get('name'), request.args.get('amount'), request.args.get('price'), request.args.get('actual'))
     
     cursor = conn.cursor()
     cursor.execute(sql, to_sql)
@@ -720,7 +776,7 @@ def new_place():
         to_sql = (request.args.get('name'), request.args.get('address'), request.args.get('actual'), request.args.get('id') )
     else:
         sql = "INSERT INTO places (name, address, is_actual) VALUES (%s, %s, %s)"
-        to_sql = (request.args.get('name'), request.args.get('address'), request.args.get('is_actual'))
+        to_sql = (request.args.get('name'), request.args.get('address'), request.args.get('actual'))
     
     cursor = conn.cursor()
     cursor.execute(sql, to_sql)
