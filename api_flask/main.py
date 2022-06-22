@@ -34,18 +34,20 @@ html шаблон
 app = Flask(__name__)
 
 
-# Хеширование пароля
+
 def making_hash(password: str):
-    # Тут создаю хэш для нового пароля с солью 
+    '''
+    Creating hash and salt for password
+    '''
     salt = uuid.uuid4().hex
     return hashlib.sha256(salt.encode() + password.encode()).hexdigest() + ':' + salt
     
 
-# Проверка пароля
+
 def check_password(login: int, user_password: str):
-    ###
-    # Check password in DB and given
-    ###
+    '''
+    Check password in DB
+    '''
 
     # Get user info via login
     sql = "SELECT * FROM \"user\" WHERE id = %s"
